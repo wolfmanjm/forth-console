@@ -4,6 +4,7 @@ package main
 // Adding ability to stream code using the dl word
 
 import (
+	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/chzyer/readline"
 	"go.bug.st/serial"
@@ -49,7 +51,7 @@ func main() {
 	defer l.Close()
 	l.CaptureExitSignal()
 
-	// get flags
+	// get flagsb
 	dev := flag.String("d", "/dev/ttyUSB0", "Set serial port")
 	baud := flag.Int("b", 3000000, "Set serial baudrate")
 
@@ -109,8 +111,9 @@ func handleCommand(l *readline.Instance, s serial.Port, line string) {
 	switch {
 	case strings.HasPrefix(line, "q"):
 		os.Exit(1)
+
 	case strings.HasPrefix(line, "d"):
-		fmt.Fprintln(l.Stderr(), "Download file: " + line[1:])
+		downLoadFile(l, s, strings.Trim(line[1:], " "))
 
 	case strings.HasPrefix(line, "p"):
 		fmt.Fprintln(l.Stderr(), "Paste with handshaking")
@@ -118,25 +121,76 @@ func handleCommand(l *readline.Instance, s serial.Port, line string) {
 		if err == nil {
 			// Read from clipboard
 			str := string(clipboard.Read(clipboard.FmtText))
-			sendWithOk(l, s, str)
+			sendLinesWithOk(l, s, str)
 		} else {
 			fmt.Fprintln(l.Stderr(), "Clipboard error: ", err.Error())
 		}
 
 	case strings.HasPrefix(line, "br"):
 		fmt.Fprintln(l.Stderr(), "Send Break")
+		s.Write([]byte("\004"))
+
 	default:
 		fmt.Fprintln(l.Stderr(), "Unknown command: " + line)
 		return
 	}
 }
 
+// Fast downloads a file using the dl word
+func downLoadFile(l *readline.Instance, s serial.Port, fn string) {
+	fmt.Fprintln(l.Stderr(), "Fast Download file: <" + fn + ">")
+	f, err := os.Open(fn)
+	if err != nil {
+   		fmt.Fprintf(l.Stderr(), "%v\n", err)
+		return
+	}
+	defer f.Close()
+
+	s.Write([]byte("dl\n"))
+	time.Sleep(10 * time.Millisecond)
+
+	// this would be better using the newer dl word
+	// ok := sendWaitForResponse(s, "dl")
+	// if !strings.HasPrefix(ok, "READY") {
+	// 	fmt.Fprintln(l.Stderr(), "Did not get READY got: " + ok)
+	// 	return
+	// }
+    // Create a new Scanner for the file
+    scanner := bufio.NewScanner(f)
+	buf := make([]byte, 0, 1024)
+	scanner.Buffer(buf, 1024)
+
+    // Iterate over each line
+    for scanner.Scan() {
+        line := scanner.Text()
+     	s.Write([]byte(line + "\n"))
+    }
+
+    // Check for errors during scanning
+    if err := scanner.Err(); err != nil {
+    	fmt.Fprintf(l.Stderr(), "Error reading file: %s\n", err.Error())
+    	return
+    }
+
+    // send ^D terminator
+    s.Write([]byte("\004"))
+}
+
+// sends a command and waits for the response which it returns
+func sendWaitForResponse(s serial.Port, str string) string {
+	cond.L.Lock()
+	defer cond.L.Unlock()
+	s.Write([]byte(str + "\n"))
+	cond.Wait()
+	return lastLine
+}
+
 // send each line of the string and wait for ok. or other error
-func sendWithOk(l *readline.Instance, s serial.Port, str string) {
+func sendLinesWithOk(l *readline.Instance, s serial.Port, str string) {
 	li := strings.SplitSeq(str, "\n")
 	for ln := range li {
-		s.Write([]byte(ln + "\n"))
 		cond.L.Lock()
+		s.Write([]byte(ln + "\n"))
 		// waits until we get a reply
 		cond.Wait()
 		if !strings.HasSuffix(lastLine, "ok.") {
