@@ -139,7 +139,12 @@ func handleCommand(l *readline.Instance, s serial.Port, line string) {
 		os.Exit(0)
 
 	case strings.HasPrefix(line, "d"):
-		downLoadFile(l, s, strings.Trim(line[1:], " "))
+		lns, err := processRequireFiles(l, strings.Trim(line[1:], " "))
+		if err != nil {
+			fmt.Fprintln(l.Stderr(), "process file: ", err.Error())
+			return
+		}
+		downLoadLines(l, s, lns)
 
 	case strings.HasPrefix(line, "i"):
 		lns, err := processRequireFiles(l, strings.Trim(line[1:], " "))
@@ -168,7 +173,7 @@ func handleCommand(l *readline.Instance, s serial.Port, line string) {
 	case strings.HasPrefix(line, "?") || strings.HasPrefix(line, "h"):
 		fmt.Fprintln(l.Stderr(), `Available Commands:
 		q - Quit
-		d fn - Fast Download file without any requires
+		d fn - Fast Download file with requires/includes
 		i fn - download file with requires/includes, using ping pong
 		p - pastes clipboard with ping pong
 		br - send ^D
@@ -282,15 +287,9 @@ func processRequireFiles(l *readline.Instance, fn string) ([]string, error) {
 	return lines, nil
 }
 
-// Fast downloads a file using the dl word
-func downLoadFile(l *readline.Instance, s serial.Port, fn string) {
-	fmt.Fprintln(l.Stderr(), "Fast Download file: <"+fn+">")
-	f, err := os.Open(fn)
-	if err != nil {
-		fmt.Fprintf(l.Stderr(), "%v\n", err)
-		return
-	}
-	defer f.Close()
+// Fast downloads lines using the dl word
+func downLoadLines(l *readline.Instance, s serial.Port, lns []string) {
+	fmt.Fprintln(l.Stderr(), "Fast Download file")
 
 	s.Write([]byte("dl\n"))
 	time.Sleep(10 * time.Millisecond)
@@ -301,23 +300,11 @@ func downLoadFile(l *readline.Instance, s serial.Port, fn string) {
 	// 	fmt.Fprintln(l.Stderr(), "Did not get READY got: " + ok)
 	// 	return
 	// }
-	// Create a new Scanner for the file
-
-	scanner := bufio.NewScanner(f)
-	buf := make([]byte, 0, 1024)
-	scanner.Buffer(buf, 1024)
 
     // Iterate over each line
-    for scanner.Scan() {
-        line := scanner.Text()
+    for _, line := range lns {
      	s.Write([]byte(line + "\n"))
     }
-
-	// Check for errors during scanning
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(l.Stderr(), "Error reading file: %s\n", err.Error())
-		return
-	}
 
 	// send ^D terminator then the load command
 	s.Write([]byte("\004"))
