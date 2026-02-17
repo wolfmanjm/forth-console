@@ -39,17 +39,19 @@ func filterInput(r rune) (rune, bool) {
 var lastLine string
 var cond *sync.Cond = sync.NewCond(&sync.Mutex{})
 var incPath []string
+var lastFile string
 
 // Function constructor - constructs new function for listing given directory
 func listFiles() func(string) []string {
 	return func(line string) []string {
 		names := make([]string, 0)
-		basedir := "."
-	    for _, ext := range []string{"fs", "f", "txt"} {
-        	pattern := filepath.Join(basedir, "*."+ext)
-	        matches, _ := filepath.Glob(pattern)
-    	    names = append(names, matches...)
-    	}
+		for _, basedir := range incPath {
+		    for _, ext := range []string{"fs", "f", "txt"} {
+	        	pattern := filepath.Join(basedir, "*."+ext)
+		        matches, _ := filepath.Glob(pattern)
+	    	    names = append(names, matches...)
+	    	}
+	    }
 		return names
 	}
 }
@@ -74,22 +76,6 @@ var completer = readline.NewPrefixCompleter(
 )
 
 func main() {
-	l, err := readline.NewEx(&readline.Config{
-		Prompt:      "\033[31m»\033[0m ",
-		HistoryFile: "./.history",
-		AutoComplete:    completer,
-		InterruptPrompt:     "^C",
-		EOFPrompt:           "exit",
-		UniqueEditLine:      true,
-		HistorySearchFold:   true,
-		FuncFilterInputRune: filterInput,
-	})
-	if err != nil {
-		panic(err)
-	}
-	defer l.Close()
-	//l.CaptureExitSignal()
-
 	// get flags
 	dev := flag.String("d", "/dev/ttyUSB0", "Set serial port")
 	baud := flag.Int("b", 3000000, "Set serial baudrate")
@@ -111,6 +97,24 @@ func main() {
 	}
 	defer s.Close()
 
+	// open readline
+	l, err := readline.NewEx(&readline.Config{
+		Prompt:      "\033[31m»\033[0m ",
+		HistoryFile: "./.history",
+		AutoComplete:    completer,
+		InterruptPrompt:     "^C",
+		EOFPrompt:           "exit",
+		UniqueEditLine:      true,
+		HistorySearchFold:   true,
+		FuncFilterInputRune: filterInput,
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer l.Close()
+	//l.CaptureExitSignal()
+
+
 	// serial reader
 	ch := make(chan string, 100)
 	defer close(ch)
@@ -128,22 +132,7 @@ func main() {
 		}
 	}()
 
-	// go udpListen()
-
-	/*
-		// Handle SIGHUP
-		go func() {
-		    c := make(chan os.Signal, 1)
-		    signal.Notify(c, syscall.SIGHUP)
-		    for {
-		        s := <-c
-		        switch s {
-		        case syscall.SIGHUP:
-		        	fmt.Println("Got SIGHUP")
-		        }
-		    }
-		}()
-	*/
+	go udpListen(l, s)
 
 	for {
 		line, err := l.Readline()
@@ -171,16 +160,20 @@ func handleCommand(l *readline.Instance, s serial.Port, line string) {
 		os.Exit(0)
 
 	case strings.HasPrefix(line, "d") || strings.HasPrefix(line, "i"):
-		lns, err := processRequireFiles(l, strings.Trim(line[1:], " "))
+		fn := strings.Trim(line[1:], " ")
+		lns, err := processRequireFiles(l, fn)
 		if err != nil {
 			fmt.Fprintln(l.Stderr(), "process file: ", err.Error())
 			return
 		}
 
-		if strings.HasPrefix(line, "d") {
-			downLoadLines(l, s, lns)
-		} else {
-			sendLinesWithOk(l, s, lns)
+		if len(lns) > 0 {
+			if strings.HasPrefix(line, "d") {
+				downLoadLines(l, s, lns)
+			} else {
+				sendLinesWithOk(l, s, lns)
+			}
+			lastFile = fn
 		}
 
 	case strings.HasPrefix(line, "p"):
@@ -405,26 +398,34 @@ func readLoop(s serial.Port, ch chan string) {
 	}
 }
 
-// listen for UDP packet, can be used to trigger an event
-func udpListen() {
-	addr := &net.UDPAddr{
-		IP:   net.IPv4(0, 0, 0, 0),
-		Port: 12345,
-		Zone: "",
-	}
-	conn, err := net.ListenUDP("udp", addr)
+// listen for UDP packet, used to trigger download
+func udpListen(l *readline.Instance, s serial.Port) {
+
+	address, err := net.ResolveUDPAddr("udp", ":12345")
 	if err != nil {
-		return
+		fmt.Println(err)
+	}
+
+	conn, err := net.ListenUDP("udp", address)
+	if err != nil {
+		fmt.Println(err)
 	}
 	defer conn.Close()
 
-	buf := make([]byte, 128)
+	buffer := make([]byte, 1024)
 	for {
-		_, _, err = conn.ReadFrom(buf)
+		n, addr, err := conn.ReadFromUDP(buffer)
+		_ = addr
 		if err != nil {
-			fmt.Println("Got UDP error: ", err.Error())
-		} else{
-			fmt.Println("Got UDP packet")
+			fmt.Fprintln(l.Stderr(), "Got UDP error: ", err.Error())
+			continue
+		}
+
+		// if lastFile == "" { continue }
+		if n > 0 {
+			fn := string(buffer[0:n])
+			fmt.Fprintln(l.Stderr(), "download file: " + fn)
+			handleCommand(l, s, "d " + fn)
 		}
 	}
 }
