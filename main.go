@@ -11,6 +11,8 @@ import (
 	"io"
 	"net"
 	"os"
+	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -37,6 +39,7 @@ func filterInput(r rune) (rune, bool) {
 // useful for checking the ok.
 var lastLine string
 var cond *sync.Cond = sync.NewCond(&sync.Mutex{})
+var incPath []string
 
 func main() {
 	l, err := readline.NewEx(&readline.Config{
@@ -53,15 +56,15 @@ func main() {
 		panic(err)
 	}
 	defer l.Close()
-	l.CaptureExitSignal()
+	//l.CaptureExitSignal()
 
 	// get flags
 	dev := flag.String("d", "/dev/ttyUSB0", "Set serial port")
 	baud := flag.Int("b", 3000000, "Set serial baudrate")
-	incPath := flag.String("I", ".:..", "append directories to include path")
-	_ = incPath
+	p := flag.String("I", ".:..", "append directories to include path")
 
 	flag.Parse()
+	incPath = strings.Split(*p, ":")
 
 	// open serial port
 	mode := &serial.Mode{
@@ -142,10 +145,9 @@ func handleCommand(l *readline.Instance, s serial.Port, line string) {
 		lns, err := processRequireFiles(l, strings.Trim(line[1:], " "))
 		if err != nil {
 			fmt.Fprintln(l.Stderr(), "process file: ", err.Error())
+			return
 		}
-		for _, ln := range lns {
-			fmt.Fprintln(l.Stderr(), ln)
-		}
+		sendLinesWithOk(l, s, lns)
 
 	case strings.HasPrefix(line, "p"):
 		fmt.Fprintln(l.Stderr(), "Paste with handshaking")
@@ -153,7 +155,8 @@ func handleCommand(l *readline.Instance, s serial.Port, line string) {
 		if err == nil {
 			// Read from clipboard
 			str := string(clipboard.Read(clipboard.FmtText))
-			sendLinesWithOk(l, s, str)
+			li := strings.Split(str, "\n")
+			sendLinesWithOk(l, s, li)
 		} else {
 			fmt.Fprintln(l.Stderr(), "Clipboard error: ", err.Error())
 		}
@@ -162,10 +165,31 @@ func handleCommand(l *readline.Instance, s serial.Port, line string) {
 		fmt.Fprintln(l.Stderr(), "Send Break")
 		s.Write([]byte("\004"))
 
+	case strings.HasPrefix(line, "?") || strings.HasPrefix(line, "h"):
+		fmt.Fprintln(l.Stderr(), `Available Commands:
+		q - Quit
+		d fn - Fast Download file without any requires
+		i fn - download file with requires/includes, using ping pong
+		p - pastes clipboard with ping pong
+		br - send ^D
+		`)
+
 	default:
 		fmt.Fprintln(l.Stderr(), "Unknown command: "+line)
 		return
 	}
+}
+
+// lookup file on the incPath
+func lookupFile(filename string) (string) {
+	for _, basepath := range incPath {
+		matches, err := filepath.Glob(path.Join(basepath, filename))
+		if len(matches) == 0 || err != nil{
+			continue
+		}
+		return matches[0]
+	}
+	return ""
 }
 
 var rc1 = regexp.MustCompile(`\s+(\\ .*)`)  // remove \ comment at end of line
@@ -177,6 +201,12 @@ var processed = make([]string, 0, 4)
 func processRequireFiles(l *readline.Instance, fn string) ([]string, error) {
 	fmt.Fprintln(l.Stderr(), "Process file: " + fn)
 
+	lfn := lookupFile(fn)
+	if lfn == "" {
+		return nil, fmt.Errorf("processRequireFiles file not found: %s", fn)
+	}
+
+	fn = lfn
 	f, err := os.Open(fn)
 	if err != nil {
 		return nil, err
@@ -216,18 +246,20 @@ func processRequireFiles(l *readline.Instance, fn string) ([]string, error) {
        			return nil, fmt.Errorf("malformed require in file: %s - %s", fn, line)
             }
 
+            rfn = strings.Trim(rfn, " ")
             if rfn == fn {
        			return nil, fmt.Errorf("cannot require itself: %s - %s", rfn, line)
             }
 
+            // check it has not already been processed
             if slices.Index(processed, rfn) == -1 {
                 fmt.Fprintf(l.Stderr(), "*** Including %s ***\n", rfn)
                 s, err := processRequireFiles(l, rfn)
                 if err != nil {
                 	return nil, fmt.Errorf("processing required file: %s - %w", rfn, err)
                 }
-                // we need to prepend the required files
-                lines = append(s, lines...)
+
+                lines = append(lines, s...)
 
 			} else {
 				fmt.Fprintln(l.Stderr(), "** INFO: already processed file: ", rfn)
@@ -303,9 +335,8 @@ func sendWaitForResponse(s serial.Port, str string) string {
 }
 
 // send each line of the string and wait for ok. or other error
-func sendLinesWithOk(l *readline.Instance, s serial.Port, str string) {
-	li := strings.SplitSeq(str, "\n")
-	for ln := range li {
+func sendLinesWithOk(l *readline.Instance, s serial.Port, li []string) {
+	for _, ln := range li {
 		cond.L.Lock()
 		s.Write([]byte(ln + "\n"))
 		// waits until we get a reply
