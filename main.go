@@ -24,7 +24,6 @@ import (
 	"golang.design/x/clipboard"
 )
 
-var completer = readline.NewPrefixCompleter()
 
 func filterInput(r rune) (rune, bool) {
 	switch r {
@@ -41,11 +40,44 @@ var lastLine string
 var cond *sync.Cond = sync.NewCond(&sync.Mutex{})
 var incPath []string
 
+// Function constructor - constructs new function for listing given directory
+func listFiles() func(string) []string {
+	return func(line string) []string {
+		names := make([]string, 0)
+		basedir := "."
+	    for _, ext := range []string{"fs", "f", "txt"} {
+        	pattern := filepath.Join(basedir, "*."+ext)
+	        matches, _ := filepath.Glob(pattern)
+    	    names = append(names, matches...)
+    	}
+		return names
+	}
+}
+
+var completer = readline.NewPrefixCompleter(
+	readline.PcItem("\\i",
+		readline.PcItemDynamic(listFiles(),
+			readline.PcItem("with",
+				readline.PcItem("following"),
+				readline.PcItem("items"),
+			),
+		),
+	),
+	readline.PcItem("\\d",
+		readline.PcItemDynamic(listFiles(),
+			readline.PcItem("with",
+				readline.PcItem("following"),
+				readline.PcItem("items"),
+			),
+		),
+	),
+)
+
 func main() {
 	l, err := readline.NewEx(&readline.Config{
 		Prompt:      "\033[31m»\033[0m ",
 		HistoryFile: "./.history",
-		// AutoComplete:    completer,
+		AutoComplete:    completer,
 		InterruptPrompt:     "^C",
 		EOFPrompt:           "exit",
 		UniqueEditLine:      true,
@@ -138,21 +170,18 @@ func handleCommand(l *readline.Instance, s serial.Port, line string) {
 	case strings.HasPrefix(line, "q"):
 		os.Exit(0)
 
-	case strings.HasPrefix(line, "d"):
+	case strings.HasPrefix(line, "d") || strings.HasPrefix(line, "i"):
 		lns, err := processRequireFiles(l, strings.Trim(line[1:], " "))
 		if err != nil {
 			fmt.Fprintln(l.Stderr(), "process file: ", err.Error())
 			return
 		}
-		downLoadLines(l, s, lns)
 
-	case strings.HasPrefix(line, "i"):
-		lns, err := processRequireFiles(l, strings.Trim(line[1:], " "))
-		if err != nil {
-			fmt.Fprintln(l.Stderr(), "process file: ", err.Error())
-			return
+		if strings.HasPrefix(line, "d") {
+			downLoadLines(l, s, lns)
+		} else {
+			sendLinesWithOk(l, s, lns)
 		}
-		sendLinesWithOk(l, s, lns)
 
 	case strings.HasPrefix(line, "p"):
 		fmt.Fprintln(l.Stderr(), "Paste with handshaking")
@@ -199,6 +228,8 @@ func lookupFile(filename string) (string) {
 
 var rc1 = regexp.MustCompile(`\s+(\\ .*)`)  // remove \ comment at end of line
 var rc2 = regexp.MustCompile(`[ \t]\(.*\)`)  // remove ( ) comment in line
+var rcbl = regexp.MustCompile(`^\s*\\\s.*`) // matches a blank line with only comment
+
 var processed = make([]string, 0, 4)
 
 // this will process a .fs file with #require and include the required files once
@@ -233,7 +264,7 @@ func processRequireFiles(l *readline.Instance, fn string) ([]string, error) {
 		if line == "" { continue }
 
 		// skip lines that only have spaces and a comment
-        if b, _ := regexp.MatchString(`^\s*\\\s.*`, line); b { continue }
+        if rcbl.MatchString(line) { continue }
 
         if strings.Contains(line, "compiletoflash") {
             fmt.Fprintln(l.Stderr(), "** Warning: compiletoflash stripped from file: ", fn)
