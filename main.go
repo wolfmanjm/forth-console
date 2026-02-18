@@ -17,13 +17,11 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/chzyer/readline"
 	"go.bug.st/serial"
 	"golang.design/x/clipboard"
 )
-
 
 func filterInput(r rune) (rune, bool) {
 	switch r {
@@ -161,7 +159,7 @@ func handleCommand(l *readline.Instance, s serial.Port, line string) {
 
 	case strings.HasPrefix(line, "d") || strings.HasPrefix(line, "i"):
 		fn := strings.Trim(line[1:], " ")
-		lns, err := processRequireFiles(l, fn)
+		lns, err := processRequireFiles("", l, fn)
 		if err != nil {
 			fmt.Fprintln(l.Stderr(), "process file: ", err.Error())
 			return
@@ -223,11 +221,12 @@ var rc1 = regexp.MustCompile(`\s+(\\ .*)`)  // remove \ comment at end of line
 var rc2 = regexp.MustCompile(`[ \t]\(.*\)`)  // remove ( ) comment in line
 var rcbl = regexp.MustCompile(`^\s*\\\s.*`) // matches a blank line with only comment
 
-var processed = make([]string, 0, 4)
+var processed []string
 
 // this will process a .fs file with #require and include the required files once
 // returns a slice of all the lines to send
-func processRequireFiles(l *readline.Instance, fn string) ([]string, error) {
+func processRequireFiles(parent string, l *readline.Instance, fn string) ([]string, error) {
+	if parent == "" { processed = make([]string, 0, 4) }
 	fmt.Fprintln(l.Stderr(), "Process file: " + fn)
 
 	lfn := lookupFile(fn)
@@ -283,7 +282,7 @@ func processRequireFiles(l *readline.Instance, fn string) ([]string, error) {
             // check it has not already been processed
             if slices.Index(processed, rfn) == -1 {
                 fmt.Fprintf(l.Stderr(), "*** Including %s ***\n", rfn)
-                s, err := processRequireFiles(l, rfn)
+                s, err := processRequireFiles(fn, l, rfn)
                 if err != nil {
                 	return nil, fmt.Errorf("processing required file: %s - %w", rfn, err)
                 }
@@ -315,15 +314,11 @@ func processRequireFiles(l *readline.Instance, fn string) ([]string, error) {
 func downLoadLines(l *readline.Instance, s serial.Port, lns []string) {
 	fmt.Fprintln(l.Stderr(), "Fast Download file")
 
-	s.Write([]byte("dl\n"))
-	time.Sleep(10 * time.Millisecond)
-
-	// this would be better using the newer dl word
-	// ok := sendWaitForResponse(s, "dl")
-	// if !strings.HasPrefix(ok, "READY") {
-	// 	fmt.Fprintln(l.Stderr(), "Did not get READY got: " + ok)
-	// 	return
-	// }
+	ok := sendWaitForResponse(s, "dl")
+	if !strings.HasPrefix(ok, "dl READY") {
+		fmt.Fprintln(l.Stderr(), "Did not get READY got: " + ok)
+		return
+	}
 
     // Iterate over each line
     for _, line := range lns {
@@ -331,8 +326,11 @@ func downLoadLines(l *readline.Instance, s serial.Port, lns []string) {
     }
 
 	// send ^D terminator then the load command
-	s.Write([]byte("\004"))
-	time.Sleep(10 * time.Millisecond)
+	ok = sendWaitForResponse(s, "\004")
+	if !strings.HasPrefix(ok, "DONE") {
+		fmt.Fprintln(l.Stderr(), "Did not get DONE got: " + ok)
+		return
+	}
 	s.Write([]byte("load\n"))
 }
 
@@ -340,7 +338,11 @@ func downLoadLines(l *readline.Instance, s serial.Port, lns []string) {
 func sendWaitForResponse(s serial.Port, str string) string {
 	cond.L.Lock()
 	defer cond.L.Unlock()
-	s.Write([]byte(str + "\n"))
+	if len(str) == 1 && str[0] == 4 {
+		s.Write([]byte("\004"))
+	} else {
+		s.Write([]byte(str + "\n"))
+	}
 	cond.Wait()
 	return lastLine
 }
