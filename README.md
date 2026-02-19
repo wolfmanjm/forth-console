@@ -51,9 +51,9 @@ ignored). This is non-standard forth so it will also do the same for
 The command history is saved to ~/.history and is persistent across runs.
 
 This program will also listen on UDP port 12345, this is used to tell it to
-fast download a file externally from a editor (I use sublimetext). You would
+download a file externally from a editor (I use sublimetext). You would
 add a command to the editor that calls `udp-send filename`, udp-send can be
-found in the cmd folder and can be built with go, various versions of the
+found in the ./cmd folder and can be built with go, various versions of the
 executable are also found there.
 
 An example of the build system I use for sublimetext editor...
@@ -61,7 +61,7 @@ An example of the build system I use for sublimetext editor...
 	"build_systems": [
         {
             "name": "forth",
-            "cmd": ["./cmd/udp-send-linux", "$file"],
+            "cmd": ["udp-send-linux", "$file"],
             "working_dir": "${file_path}",
             "file_regex": "^(..[^:]*):([0-9]+):?([0-9]+)?:? (.*)$",
         },
