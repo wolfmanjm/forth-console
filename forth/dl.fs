@@ -17,7 +17,7 @@
     \ decide the size of the buffer, for now use 1/4 the unused size (allows room for dictionary expansion)
     \ and leave 1/4 of the memory for flashvar and that leaves 1/2 for dictionary expansion
     unused 4 / dlbufsize !
-    flashvar-here dlbufsize @ - dlbuf !  \ address of the download buffer
+    flashvar-here dlbufsize @ 2* - dlbuf !  \ address of the download buffer
     \ ." dlbuf address is: " dlbuf @ hex. ." size is: " dlbufsize @ . cr
 
     1 dlsize !      \ overall buffer size

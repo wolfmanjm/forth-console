@@ -46,7 +46,9 @@ When using the \i or \d commands it will process the file and
 `#require filename` or `#include filename` found in the source will insert that file
 into the download stream (only once if it is found a second time it will be
 ignored). This is non-standard forth so it will also do the same for
-`\ #require` and `\ #include`
+`\ #require` and `\ #include`.
+
+All comments and blank lines are also stripped.
 
 The command history is saved to ~/.history and is persistent across runs.
 
