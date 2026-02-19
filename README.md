@@ -1,6 +1,6 @@
 This is a forth console inspired by e4thcomm.
 
-It has line editing, command history, tab completion for filenames used for download.
+It has line editing, command history, TAB completion for filenames used for download.
 
 Command line options..
 
@@ -23,7 +23,8 @@ At the prompt you can prefix a command by \ the available commands are:
 
 Also ^D will quit and ^C will interrupt.
 
-if you type \i or \d then a TAB it will show all the forth source files available.
+If you type \i or \d then a TAB it will show all the forth source files
+available whicj you can select with TAB.
 
 \d uses a fast download which basically streams to a large buffer then
  evaluates that buffer, really nice for large files you know compile ok. The
@@ -34,5 +35,25 @@ if you type \i or \d then a TAB it will show all the forth source files availabl
  it will stop, thisd is useful for sending smaller files that have just been
  developed and not tested yet.
 
+This program will also listen on UDP port 12345, this is used to tell it to
+fast download a file externally from a editor (I use sublimetext). You would
+add a comamnd to the editor that calls `udp-send filename`, udp-send can be
+found in the cmd folder and can be built with go, various versions of the
+executable are also found there.
 
+An example of the build system I use for sublimetext editor...
 
+	"build_systems": [
+        {
+            "name": "forth",
+            "cmd": ["./cmd/udp-send", "$file"],
+            "working_dir": "${file_path}",
+            "file_regex": "^(..[^:]*):([0-9]+):?([0-9]+)?:? (.*)$",
+        },
+	],
+
+Another handy feature is the `\p` command this will send whatever is in the
+clipboard to the target, checking `ok.` as it goes. Really handy for sending
+small clips of forth code.
+
+Lastly various binaries are precompiled and stored in the bins folder.
