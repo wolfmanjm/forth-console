@@ -227,12 +227,15 @@ func processRequireFiles(parent string, l *readline.Instance, fn string) ([]stri
 	if parent == "" { processed = make([]string, 0, 4) }
 	fmt.Fprintln(l.Stderr(), "Process file: " + fn)
 
-	lfn := lookupFile(fn)
-	if lfn == "" {
-		return nil, fmt.Errorf("processRequireFiles file not found: %s", fn)
+	if !strings.HasPrefix(fn, "/") {
+		// find filename on the include path
+		lfn := lookupFile(fn)
+		if lfn == "" {
+			return nil, fmt.Errorf("processRequireFiles file not found: %s", fn)
+		}
+		fn = lfn
 	}
 
-	fn = lfn
 	f, err := os.Open(fn)
 	if err != nil {
 		return nil, err
@@ -255,16 +258,6 @@ func processRequireFiles(parent string, l *readline.Instance, fn string) ([]stri
 
 		// skip lines that only have spaces and a comment
         if rcbl.MatchString(line) { continue }
-
-        if strings.Contains(line, "compiletoflash") {
-            fmt.Fprintln(l.Stderr(), "** Warning: compiletoflash stripped from file: ", fn)
-            continue
-		}
-
-        if strings.Contains(line, "compiletoram") {
-            fmt.Fprintln(l.Stderr(), "** Warning: compiletoram stripped from file: ", fn)
-            continue
-		}
 
         if strings.HasPrefix(line, "#require ") || strings.HasPrefix(line, "#include ") ||
            strings.HasPrefix(line, "\\ #require ") || strings.HasPrefix(line, "\\ #include ") {
@@ -427,7 +420,7 @@ func udpListen(l *readline.Instance, s serial.Port) {
 		if n > 0 {
 			fn := string(buffer[0:n])
 			fmt.Fprintln(l.Stderr(), "download file: " + fn)
-			handleCommand(l, s, "d " + fn)
+			handleCommand(l, s, "i " + fn)
 		}
 	}
 }

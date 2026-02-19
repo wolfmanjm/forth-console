@@ -1,6 +1,7 @@
 This is a forth console inspired by e4thcom, but taking it a bit further.
 
 It has line editing, command history, TAB completion for filenames and various download commands.
+Also, the main reason for writing this, it has an extremely fast download option.
 
 Command line options..
 
@@ -25,7 +26,9 @@ At the prompt you can prefix a command by `\` the available commands are:
 	  \p    - Pastes clipboard with ping pong
 	  \br   - Send ^D
 
-Also if typed at the prompt `^D` (control D) will quit and `^C` will interrupt.
+*NOTE* "ping pong" means that for every line sent it waits for `ok.` before sending the next line.
+
+If typed at the prompt `^D` (control D) will quit and `^C` will interrupt.
 
 If you type `\i` or `\d` then a TAB it will show all the forth source files
 available which you can select with TAB.
@@ -39,7 +42,7 @@ available which you can select with TAB.
  it will stop, this is useful for sending smaller files that have just been
  developed and not tested yet.
 
-When using the \i or \d commands it will process the file and and
+When using the \i or \d commands it will process the file and
 `#require filename` or `#include filename` found in the source will insert that file
 into the download stream (only once if it is found a second time it will be
 ignored). This is non-standard forth so it will also do the same for
@@ -49,7 +52,7 @@ The command history is saved to ~/.history and is persistent across runs.
 
 This program will also listen on UDP port 12345, this is used to tell it to
 fast download a file externally from a editor (I use sublimetext). You would
-add a comamnd to the editor that calls `udp-send filename`, udp-send can be
+add a command to the editor that calls `udp-send filename`, udp-send can be
 found in the cmd folder and can be built with go, various versions of the
 executable are also found there.
 
