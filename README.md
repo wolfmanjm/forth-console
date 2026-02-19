@@ -45,6 +45,7 @@ into the download stream (only once if it is found a second time it will be
 ignored). This is non-standard forth so it will also do the same for
 `\ #require` and `\ #include`
 
+The command history is saved to ~/.history and is persistent across runs.
 
 This program will also listen on UDP port 12345, this is used to tell it to
 fast download a file externally from a editor (I use sublimetext). You would

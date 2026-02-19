@@ -37,7 +37,6 @@ func filterInput(r rune) (rune, bool) {
 var lastLine string
 var cond *sync.Cond = sync.NewCond(&sync.Mutex{})
 var incPath []string
-var lastFile string
 
 // Function constructor - constructs new function for listing given directory
 func listFiles() func(string) []string {
@@ -171,7 +170,6 @@ func handleCommand(l *readline.Instance, s serial.Port, line string) {
 			} else {
 				sendLinesWithOk(l, s, lns)
 			}
-			lastFile = fn
 		}
 
 	case strings.HasPrefix(line, "p"):
