@@ -268,7 +268,9 @@ func processRequireFiles(parent string, l *readline.Instance, fn string) ([]stri
             continue
 		}
 
-        if strings.HasPrefix(line, "#require ") || strings.HasPrefix(line, "#include ") {
+        if strings.HasPrefix(line, "#require ") || strings.HasPrefix(line, "#include ") ||
+           strings.HasPrefix(line, "\\ #require ") || strings.HasPrefix(line, "\\ #include ") {
+
             _, rfn, ok := strings.Cut(line, " ")
             if !ok {
        			return nil, fmt.Errorf("malformed require in file: %s - %s", fn, line)

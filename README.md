@@ -35,6 +35,13 @@ available whicj you can select with TAB.
  it will stop, thisd is useful for sending smaller files that have just been
  developed and not tested yet.
 
+When using the \i or \d commands it will process the file and and
+`#require filename` or `#include filename` found in the source will insert that file
+into the download stream (only once if it is found a second time it will be
+ignored). This is non-standard forth so it will also do the same for
+`\ #require` and `\ #include`
+
+
 This program will also listen on UDP port 12345, this is used to tell it to
 fast download a file externally from a editor (I use sublimetext). You would
 add a comamnd to the editor that calls `udp-send filename`, udp-send can be
