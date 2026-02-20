@@ -190,6 +190,18 @@ func handleCommand(l *readline.Instance, s serial.Port, line string) {
 		fmt.Fprintln(l.Stderr(), "Send Break")
 		s.Write([]byte("\004"))
 
+	case strings.HasPrefix(line, "cd"):
+		fmt.Fprintln(l.Stderr(), "Send ^D")
+		s.Write([]byte("\004"))
+
+	case strings.HasPrefix(line, "cc"):
+		fmt.Fprintln(l.Stderr(), "Send ^C")
+		s.Write([]byte("\003"))
+
+	case strings.HasPrefix(line, "ce"):
+		fmt.Fprintln(l.Stderr(), "Send ^E")
+		s.Write([]byte("\005"))
+
 	case strings.HasPrefix(line, "?") || strings.HasPrefix(line, "h"):
 		fmt.Fprintln(l.Stderr(), `Available Commands:
 		q - Quit
@@ -197,6 +209,9 @@ func handleCommand(l *readline.Instance, s serial.Port, line string) {
 		i fn - download file with requires/includes, using ping pong
 		p - pastes clipboard with ping pong
 		br - send ^D
+		cc - send ^C
+		cd - send ^D
+		ce - send ^E
 		`)
 
 	default:
@@ -219,7 +234,7 @@ func lookupFile(filename string) (string) {
 
 var rc1 = regexp.MustCompile(`\s+(\\ .*)`)  // remove \ comment at end of line
 var rc2 = regexp.MustCompile(`[ \t]\(.*\)`)  // remove ( ) comment in line
-var rcbl = regexp.MustCompile(`^\s*\\\s.*`) // matches a blank line with only comment
+var rcbl = regexp.MustCompile(`^\s*\\ .*`) // matches a blank line with only comment
 
 var processed []string
 
@@ -259,6 +274,7 @@ func processRequireFiles(parent string, l *readline.Instance, fn string) ([]stri
 		if line == "" { continue }
 
 		// skip lines that only have spaces and a comment
+		if strings.HasPrefix(line, "\\") { continue }
         if rcbl.MatchString(line) { continue }
 
         if strings.HasPrefix(line, "#require ") || strings.HasPrefix(line, "#include ") ||
