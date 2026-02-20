@@ -121,11 +121,13 @@ func main() {
 	// display any lines we get
 	go func() {
 		for s := range ch {
-			fmt.Fprint(l.Stdout(), s)
-			cond.L.Lock()
-			lastLine = strings.TrimSuffix(s, "\n")
-			cond.L.Unlock()
-			cond.Signal()
+			l.Stdout().Write([]byte(s))
+			if strings.HasSuffix(s, "\n") {
+				cond.L.Lock()
+				lastLine = strings.TrimSuffix(s, "\n")
+				cond.L.Unlock()
+				cond.Signal()
+			}
 		}
 	}()
 
@@ -357,7 +359,7 @@ func sendLinesWithOk(l *readline.Instance, s serial.Port, li []string) {
 }
 
 // this reads from the serial line and sends whole lines to the channel
-// it buffers up partial lines
+// it buffers up partial lines until they reach the buffer limit
 func readLoop(s serial.Port, ch chan string) {
 	buf := make([]byte, 1024)
 	var rdBuf bytes.Buffer
@@ -373,12 +375,12 @@ func readLoop(s serial.Port, ch chan string) {
 		// if we have a partial line left over from last time then append new data to it
 		if rdBuf.Len() > 0 {
 			rdBuf.Write(buf[:n])
-			// this reads the last fragment prepended to the new data
 			n, _ = rdBuf.Read(buf)
+			// if the rdBuf is still bigger than buf we send the section we know does not have \n upstream
+			// then process the rest of the buffer
 			if n >= len(buf) {
-				ch <- string(buf)
-				rdBuf.Reset()
-				continue
+				ch <- string(buf[:n]) + "\n"
+				n, _ = rdBuf.Read(buf)
 			}
 		}
 
@@ -387,6 +389,7 @@ func readLoop(s serial.Port, ch chan string) {
 			if bytes.HasSuffix(l, []byte("\n")) {
 				ch <- string(l)
 			} else {
+				// partial lines get buffered until \n is found
 				rdBuf.Write(l)
 			}
 		}
