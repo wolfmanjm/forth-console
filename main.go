@@ -376,7 +376,7 @@ func readLoop(s serial.Port, ch chan string) {
 			// this reads the last fragment prepended to the new data
 			n, _ = rdBuf.Read(buf)
 			if n >= len(buf) {
-				fmt.Println("line too long, discarded")
+				ch <- string(buf)
 				rdBuf.Reset()
 				continue
 			}
